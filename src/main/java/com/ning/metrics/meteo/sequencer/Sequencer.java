@@ -48,7 +48,7 @@ public class Sequencer {
             vT0 = el.getDate().getMillis();
             if (T0 < vT0) {
                 log.error("TO = " + T0 + " (" + (new DateTime(T0, DateTimeZone.forID("UTC"))) + "), vT0 = " +vT0 + " (" + (new DateTime(vT0, DateTimeZone.forID("UTC"))) + ")");
-                throw new RuntimeException("Can't play (yet) visit from the future");
+                throw new RuntimeException("Can't play (yet) element from the future");
             }
             firstElement = el;
             log.info("Sequencer initialized with T0 = " + T0 + ", vTO = " + vT0);
@@ -78,7 +78,7 @@ public class Sequencer {
                 if (prevElement != null && waitTime > WAIT_LOG_THRESHOLD) {
                     log.warn("Waiting for more than " + waitTime / 1000 +
                             " sec. prevElement = " + new DateTime(prevElement.getDate()).toString() +
-                            " cur Visit = " + new DateTime(el.getDate()).toString());
+                            " curElement = " + new DateTime(el.getDate()).toString());
                 }
                 totalWait += waitTime;
             } catch (InterruptedException ie) {

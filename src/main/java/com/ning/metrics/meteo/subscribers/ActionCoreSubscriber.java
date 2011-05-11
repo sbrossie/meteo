@@ -1,9 +1,7 @@
 package com.ning.metrics.meteo.subscribers;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -25,6 +23,7 @@ import com.ning.http.client.AsyncHttpClientConfig;
 import com.ning.http.client.Response;
 import com.ning.metrics.meteo.sequencer.Sequencer;
 import com.ning.metrics.meteo.sequencer.SequencerElement;
+import com.ning.metrics.meteo.subscribers.parser.ActionCoreParser;
 
 public class ActionCoreSubscriber implements Subscriber {
 
@@ -42,6 +41,7 @@ public class ActionCoreSubscriber implements Subscriber {
     private final String [] allEventFields;
 
     private final Sequencer sequencer;
+    private final ActionCoreParser actionCoreParser;
 
 
     private final static LinkedHashMap<String, Object> map = new LinkedHashMap<String, Object>();
@@ -61,6 +61,9 @@ public class ActionCoreSubscriber implements Subscriber {
         this.sequencer = (this.sequencerField != null) ? new Sequencer() : null;
         String eventFields = subscriberConfig.getEventFields();
         this.allEventFields = eventFields.split("\\s*,\\s*");
+        this.actionCoreParser = new ActionCoreParser(ActionCoreParser.ActionCoreParserFormat.getFromString((subscriberConfig.getParserType())),
+                subscriberConfig.getEventOutputName(),
+                allEventFields);
     }
 
 
@@ -70,7 +73,6 @@ public class ActionCoreSubscriber implements Subscriber {
         ImmutableList<Map<String, Object>> points = getDataPoints();
         for (Map<String, Object> curPoint : points) {
             try {
-                // "2011-05-10 16:45:16"
                 String pointTimeStr = (String) curPoint.get(sequencerField);
                 DateTime pointTime = fmt.parseDateTime(pointTimeStr);
                 sequence(pointTime, curPoint);
@@ -92,45 +94,6 @@ public class ActionCoreSubscriber implements Subscriber {
             return;
         }
         sequencer.wait(new SequencerElement(pointDate, point));
-    }
-
-    private Map<String, Object> extractEvent(Map<String, Object> eventFull) {
-
-        Map<String, Object> result = new HashMap<String, Object>();
-
-        for (String key : allEventFields) {
-            Object value = eventFull.get(key);
-            if (value == null) {
-                log.warn("Event " + subscriberConfig.getEventOutputName() + " is missing key " + key);
-                continue;
-            }
-            result.put(key, value);
-        }
-        return result;
-    }
-
-    private Map<String, Object> extractEventTabSep(String event) {
-        Map<String, Object> result = new HashMap<String, Object>();
-        if (event == null) {
-            return result;
-        }
-
-        String eventFields = subscriberConfig.getEventFields();
-        String [] allEventFields = eventFields.split("\\s*,\\s*");
-
-
-        String [] parts = event.split("\\t");
-        if (parts == null || parts.length != allEventFields.length) {
-            log.warn("Unexpected event content size = " + ((parts == null) ? 0 : parts.length));
-            return result;
-        }
-
-        int i = 0;
-        for (String key : allEventFields) {
-            result.put(key, parts[i]);
-            i++;
-        }
-        return result;
     }
 
 
@@ -161,39 +124,7 @@ public class ActionCoreSubscriber implements Subscriber {
 
             // Wait for results
             String json = future.get(ActionCoreSubscriberConfig.ACTION_CORE_TIMEOUT_SEC, TimeUnit.SECONDS);
-
-            ImmutableList.Builder<Map<String, Object>> builder = new ImmutableList.Builder<Map<String, Object>>();
-
-            Map eventTop = mapper.readValue(json, Map.class);
-            List<Map> entriesDirectory = (List<Map>) eventTop.get("entries");
-            for (Map entryDirectory : entriesDirectory) {
-
-                //Map entryContent = (Map) entryDirectory.get("content");
-                //List<Map> entries = (List<Map>) entryContent.get("entries");
-                //List<Map> entries = (List<Map>) entryContent.get("entries");
-
-                List<Map> entries = null;
-                Object entriesRow =  null;
-                try {
-                    entriesRow =  entryDirectory.get("content");
-                    if (entriesRow == null) {
-                        continue;
-                    }
-                    if (entriesRow instanceof java.lang.String && ((String)entriesRow).equals("")) {
-                        continue;
-                    }
-
-                    entries = (List<Map>) entriesRow;
-                } catch (Exception e) {
-                    log.error("Failed to deserialize the event " + entriesRow.toString());
-                }
-                for (Map<String, Object> event : entries) {
-
-                    Map<String, Object> simplifiedEvent = extractEventTabSep((String) event.get("record"));
-                    builder.add(simplifiedEvent);
-                }
-            }
-            return builder.build();
+            return actionCoreParser.parse(json);
 
         } catch (IOException ioe) {
             log.warn("IOException : Failed to connect to action code : url = " + url + ", error = " + ioe.getMessage());

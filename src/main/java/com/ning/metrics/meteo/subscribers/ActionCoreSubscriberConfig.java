@@ -17,7 +17,14 @@ public class ActionCoreSubscriberConfig extends SubscriberConfig {
     public String hdfsPath;
     public String eventFields;
     public String sequencerForField;
+    public String parserType;
 
+    public String getParserType() {
+        return parserType;
+    }
+    public void setParserType(String parserType) {
+        this.parserType = parserType;
+    }
     public String getSequencerForField() {
         return sequencerForField;
     }
